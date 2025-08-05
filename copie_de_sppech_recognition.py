@@ -11,54 +11,63 @@ import subprocess
 import os
 import speech_recognition as sr
 
-def convert_to_wav(input_path, output_path):
-    """Convert audio to WAV format using ffmpeg."""
-    try:
-        subprocess.run(
-            ["ffmpeg", "-i", input_path, "-ar", "16000", "-ac", "1", output_path],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        return output_path
-    except Exception as e:
+def select_api():
+    print("Select Speech Recognition API:")
+    print("1. Google Speech Recognition")
+    print("2. Sphinx (Offline)")
+    choice = input("Enter choice (1/2): ")
+    return "google" if choice == "1" else "sphinx"
+
+def select_language():
+    print("Enter language code (default = en-US):")
+    print("Examples: en-US (English), fr-FR (French), ar-SA (Arabic)")
+    lang = input("Language code: ").strip()
+    return lang if lang else "en-US"
+
+def transcribe_speech(api_choice, language):
+    recognizer = sr.Recognizer()
+
+    with sr.Microphone() as source:
+        print("Adjusting for ambient noise... Please wait")
+        recognizer.adjust_for_ambient_noise(source)
+        print("Recording... (say 'pause' to pause and 'resume' to continue)")
+        audio_data = recognizer.listen(source)
+
+        try:
+            if api_choice == "google":
+                text = recognizer.recognize_google(audio_data, language=language)
+            else:
+                text = recognizer.recognize_sphinx(audio_data, language=language)
+            print("Transcription:", text)
+            return text
+
+        except sr.UnknownValueError:
+            print("❌ Could not understand the audio.")
+        except sr.RequestError as e:
+            print(f"⚠️ API request failed: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
         return None
 
-def transcribe_speech_from_file(file_path):
-    # Convert audio to WAV format
-    wav_path = f"{os.path.splitext(file_path)[0]}.wav"
-    converted_path = convert_to_wav(file_path, wav_path)
-
-    if not converted_path:
-        return "Error: Failed to convert audio file to WAV format."
-
-    # Initialize recognizer
-    r = sr.Recognizer()
-    try:
-        with sr.AudioFile(converted_path) as source:
-            audio = r.record(source)  # Read the entire audio file
-        return r.recognize_google(audio)
-    except Exception as e:
-        return f"Error during transcription: {str(e)}"
-
+def save_to_file(text):
+    filename = input("Enter filename to save transcription (default: transcription.txt): ").strip()
+    filename = filename if filename else "transcription.txt"
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(text)
+    print(f"✅ Transcription saved to {filename}")
 
 def main():
-    st.title("Speech Recognition App")
-    uploaded_file = st.file_uploader("Upload an audio file (MP3, WAV, etc.)", type=["wav", "flac", "mp3", "aac"])
-    
-    if uploaded_file is not None:
-        st.info("Processing uploaded audio file...")
-        file_path = f"/tmp/{uploaded_file.name}"
-        
-        # Save uploaded file to temp directory
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+    api_choice = select_api()
+    language = select_language()
 
-        # Transcribe the uploaded file
-        text = transcribe_speech_from_file(file_path)
-        st.write("Transcription:", text)
+    transcription = transcribe_speech(api_choice, language)
+    if transcription:
+        save = input("Do you want to save the transcription to a file? (y/n): ").lower()
+        if save == "y":
+            save_to_file(transcription)
 
 if __name__ == "__main__":
     main()
+
 
 
